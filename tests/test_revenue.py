@@ -39,3 +39,25 @@ def test_replayed_event_is_counted_once():
     ])
     report = daily_revenue(events)
     assert report["revenue_cents"].tolist() == [4000]
+
+
+def test_replay_received_after_midnight_stays_on_its_occurrence_day():
+    # A replay can arrive after midnight, but it must not move or duplicate revenue.
+    events = frame([
+        ("evt_m", "ord_10", "2026-10-30T23:59:00Z", "2026-10-30T23:59:01Z", 700),
+        ("evt_m", "ord_10", "2026-10-30T23:59:00Z", "2026-10-31T00:00:30Z", 700),
+    ])
+    report = daily_revenue(events)
+    assert dict(zip(report["day"], report["revenue_cents"])) == {"2026-10-30": 700}
+
+
+def test_identical_payments_on_one_order_survive_a_replay():
+    # Two distinct events share order, timestamp and amount; replaying one must not
+    # drop the other, so the total is 2000 + 2000 = 4000 cents.
+    events = frame([
+        ("evt_s1", "ord_11", "2026-10-30T15:00:00Z", "2026-10-30T15:00:01Z", 2000),
+        ("evt_s2", "ord_11", "2026-10-30T15:00:00Z", "2026-10-30T15:00:01Z", 2000),
+        ("evt_s2", "ord_11", "2026-10-30T15:00:00Z", "2026-10-30T15:05:00Z", 2000),
+    ])
+    report = daily_revenue(events)
+    assert report["revenue_cents"].tolist() == [4000]
